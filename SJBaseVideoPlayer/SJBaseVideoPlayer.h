@@ -2,13 +2,14 @@
 //  SJBaseVideoPlayer.h
 //  SJBaseVideoPlayerProject
 //
-//  Created by BlueDancer on 2018/2/2.
-//  Copyright © 2018年 SanJiang. All rights reserved.
+//  Created by 畅三江 on 2018/2/2.
+//  Copyright © 2018年 changsanjiang. All rights reserved.
 //
 //  GitHub:     https://github.com/changsanjiang/SJBaseVideoPlayer
 //  GitHub:     https://github.com/changsanjiang/SJVideoPlayer
 //
 //  Email:      changsanjiang@gmail.com
+//  QQGroup:    930508201
 //
 
 #import <UIKit/UIKit.h>
@@ -24,9 +25,11 @@
 #import "SJFloatSmallViewControllerDefines.h"
 #import "SJEdgeFastForwardViewControllerDefines.h"
 #import "SJVideoDefinitionSwitchingInfo.h"
-#import "SJPopPromptControllerProtocol.h"
-#import "SJBaseVideoPlayerObservation.h"
+#import "SJPopPromptControllerDefines.h"
+#import "SJPlaybackObservation.h"
 #import "SJVideoPlayerPresentViewDefines.h"
+#import "SJSubtitlesPromptControllerDefines.h"
+#import "SJBarrageQueueControllerDefines.h"
 #import "SJPromptDefines.h"
 
 NS_ASSUME_NONNULL_BEGIN
@@ -59,10 +62,13 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface SJBaseVideoPlayer (Placeholder)
 ///
-/// 显示播放画面
+/// 播放画面显示层
 ///
-///         内部自带placeholderImageView, 可以设置占位图(本地图片或URL)
-///         了解更多请前往协议头文件查看
+/// \code
+///     // 设置占位图
+///     _player.presentView.placeholderImageView.image = [UIImage imageNamed:@"..."];
+///     // [_player.presentView.placeholderImageView sd_setImageWithURL:URL];
+/// \endcode
 ///
 @property (nonatomic, strong, readonly) UIView<SJVideoPlayerPresentView> *presentView;
 
@@ -288,7 +294,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// v1.3.0 新增
 /// 请在适当的时候调用这些方法
-@interface SJBaseVideoPlayer (ViewController)
+@interface SJBaseVideoPlayer (Life)
 
 /// You should call it when view did appear
 - (void)vc_viewDidAppear; 
@@ -379,11 +385,11 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong, null_resettable) id<SJPromptProtocol> prompt;
 
 ///
-/// 右下角弹出提示
+/// 左下角弹出提示
 ///
 ///         了解更多请前往协议头文件查看
 ///
-@property (nonatomic, strong, null_resettable) id<SJPopPromptControllerProtocol> popPromptController;
+@property (nonatomic, strong, null_resettable) id<SJPopPromptController> popPromptController;
 @end
 
 
@@ -439,7 +445,7 @@ NS_ASSUME_NONNULL_BEGIN
 ///
 ///         default value is NO, 当需要开启时, 请设置`player.fastForwardViewController.enabled = YES;`
 ///
-@property (nonatomic, strong, null_resettable) id<SJEdgeFastForwardViewControllerProtocol> fastForwardViewController;
+@property (nonatomic, strong, null_resettable) id<SJEdgeFastForwardViewController> fastForwardViewController;
 @end
 
 
@@ -579,7 +585,7 @@ NS_ASSUME_NONNULL_BEGIN
 ///         如果需要禁止自动旋转, 可以设置`player.rotationManager.disabledAutorotation = YES;`
 ///         了解更多请前往头文件查看
 ///
-@property (nonatomic, strong, null_resettable) id<SJRotationManagerProtocol> rotationManager;
+@property (nonatomic, strong, null_resettable) id<SJRotationManager> rotationManager;
 
 ///
 /// 观察者
@@ -688,7 +694,18 @@ NS_ASSUME_NONNULL_BEGIN
 ///
 /// 默认不启用, 当需要开启时, 请设置`player.floatSmallViewController.enabled = YES;`
 ///
-@property (nonatomic, strong, null_resettable) id<SJFloatSmallViewControllerProtocol> floatSmallViewController;
+/// \code
+///
+///     // 1. 开启小浮窗控制. 滑动列表当视图消失时, 将显示小浮窗视图
+///     _player.floatSmallViewController.enabled = YES;
+///     // 2. 设置单击小浮窗执行的block
+///     _player.floatSmallViewController.singleTappedOnTheFloatViewExeBlock = ...;
+///     // 3. 设置双击小浮窗执行的block
+///     _player.floatSmallViewController.doubleTappedOnTheFloatViewExeBlock = ...;
+///
+/// \endcode
+///
+@property (nonatomic, strong, null_resettable) id<SJFloatSmallViewController> floatSmallViewController;
 
 ///
 /// 当开启小浮窗控制时, 播放结束后, 会默认隐藏小浮窗
@@ -737,7 +754,81 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 
+#pragma mark - 字幕
 
+@interface SJBaseVideoPlayer (Subtitles)
+///
+/// 字幕管理
+///
+/// \code
+///
+/// #import <SJBaseVideoPlayer/SJVideoPlayerURLAsset+SJSubtitlesAdd.h>
+///
+///     // 1. 创建资源
+///     SJVideoPlayerURLAsset *asset = [SJVideoPlayerURLAsset.alloc initWithURL:URL];
+///     // 2. 设置资源的字幕
+///     asset.subtitles = @[[SJSubtitleItem.alloc initWithContent:@"我的故事" range:SJMakeTimeRange(start, duration)],
+///                         [SJSubtitleItem.alloc initWithContent:@"从这里开始" range:SJMakeTimeRange(start, duration)]];
+///     // 3. 进行播放, 字幕将在相应的时机自动显示
+///     _player.URLAsset = asset;
+///
+///
+///     // 以下是更多设置
+///     _player.subtitleBottomMargin = 22.0;
+///     _player.subtitleHorizontalMinMargin = 22.0;
+///     _player.subtitlesPromptController.view.backgroundColor = [UIColor colorWithWhite:0 alpha:0.8];
+///     _player.subtitlesPromptController.view.layer.cornerRadius = 5;
+///     _player.subtitlesPromptController.contentInsets = UIEdgeInsetsMake(12, 22, 12, 22);
+///
+/// \endcode
+///
+@property (nonatomic, strong, null_resettable) id<SJSubtitlesPromptController> subtitlesPromptController;
+
+///
+/// 字幕底部间距
+///
+///     default value is 22
+///
+@property (nonatomic) CGFloat subtitleBottomMargin;
+
+///
+/// 左右距离屏幕最小间距
+///
+///     default value is 22
+///
+@property (nonatomic) CGFloat subtitleHorizontalMinMargin;
+@end
+
+
+#pragma mark - 弹幕
+
+@interface SJBaseVideoPlayer (Barrages)
+
+///
+/// 弹幕控制
+///
+/// \code
+///
+/// #import <SJBaseVideoPlayer/SJBarrageItem.h>
+///
+///     // 创建一条弹幕
+///     SJBarrageItem *item = [SJBarrageItem.alloc initWithContent:[NSAttributedString sj_UIKitText:^(id<SJUIKitTextMakerProtocol>  _Nonnull make) {
+///         make.append( @"我是一条弹幕消息" );
+///         make.font([UIFont boldSystemFontOfSize:16]);
+///         make.textColor(UIColor.whiteColor);
+///         make.stroke(^(id<SJUTStroke>  _Nonnull make) {
+///             make.color = UIColor.blackColor;
+///             make.width = -1;
+///         });
+///     }]];
+///
+///     // 发送一条弹幕, 弹幕将自动显示
+///     [self.player.barrageQueueController enqueue:item];
+///
+/// \endcode
+///
+@property (nonatomic, strong, null_resettable) id<SJBarrageQueueController> barrageQueueController;
+@end
 
 #pragma mark - 已弃用
 

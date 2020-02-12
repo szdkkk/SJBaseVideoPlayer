@@ -1,6 +1,6 @@
 {
   "name": "SJBaseVideoPlayer",
-  "version": "3.0.0",
+  "version": "3.1.7",
   "summary": "video player.",
   "description": "https://github.com/changsanjiang/SJBaseVideoPlayer/blob/master/README.md",
   "homepage": "https://github.com/changsanjiang/SJBaseVideoPlayer",
@@ -12,107 +12,98 @@
     "SanJiang": "changsanjiang@gmail.com"
   },
   "platforms": {
-    "ios": "9.0"
+    "ios": "8.0"
   },
   "source": {
     "git": "https://github.com/changsanjiang/SJBaseVideoPlayer.git",
-    "tag": "v3.0.0"
+    "tag": "v3.1.7"
   },
   "frameworks": [
     "UIKit",
     "AVFoundation"
   ],
   "requires_arc": true,
+  "source_files": "SJBaseVideoPlayer/*.{h,m}",
+  "default_subspecs": [
+    "Common",
+    "AVPlayer"
+  ],
   "dependencies": {
     "Masonry": [
 
     ],
+    "SJUIKit/AttributesFactory": [
+      ">= 0.0.0.38"
+    ],
     "SJUIKit/ObserverHelper": [
-      ">= 0.0.0.31"
+      ">= 0.0.0.38"
     ],
     "SJUIKit/Queues": [
-      ">= 0.0.0.31"
+      ">= 0.0.0.38"
     ],
     "Reachability": [
 
     ]
   },
-  "source_files": "SJBaseVideoPlayer/*.{h,m}",
   "subspecs": [
     {
-      "name": "Header",
-      "source_files": "SJBaseVideoPlayer/Header/*.{h}"
-    },
-    {
-      "name": "Const",
-      "source_files": "SJBaseVideoPlayer/Const/*.{h,m}"
-    },
-    {
-      "name": "Tool",
-      "source_files": "SJBaseVideoPlayer/Tool/*.{h,m}",
+      "name": "Common",
+      "source_files": "SJBaseVideoPlayer/Common/**/*.{h,m}",
       "dependencies": {
-        "SJBaseVideoPlayer/Header": [
-
-        ],
-        "SJBaseVideoPlayer/Model": [
-
-        ],
-        "SJBaseVideoPlayer/Const": [
+        "SJBaseVideoPlayer/ResourceLoader": [
 
         ]
       }
     },
     {
-      "name": "Model",
-      "source_files": "SJBaseVideoPlayer/Model/*.{h,m}",
+      "name": "ResourceLoader",
+      "source_files": "SJBaseVideoPlayer/ResourceLoader/*.{h,m}",
+      "resources": "SJBaseVideoPlayer/ResourceLoader/SJBaseVideoPlayerResources.bundle"
+    },
+    {
+      "name": "AVPlayer",
+      "source_files": "SJBaseVideoPlayer/AVPlayer/**/*.{h,m}",
       "dependencies": {
-        "SJBaseVideoPlayer/Header": [
+        "SJBaseVideoPlayer/Common": [
 
         ]
       }
     },
     {
-      "name": "SJAVMediaPlaybackController",
-      "source_files": "SJBaseVideoPlayer/SJAVMediaPlaybackController/*.{h,m}",
+      "name": "IJKPlayer",
+      "source_files": "SJBaseVideoPlayer/IJKPlayer/**/*.{h,m}",
       "dependencies": {
-        "SJBaseVideoPlayer/Tool": [
-
-        ]
-      },
-      "subspecs": [
-        {
-          "name": "Core",
-          "source_files": "SJBaseVideoPlayer/SJAVMediaPlaybackController/Core/*.{h,m}"
-        }
-      ]
-    },
-    {
-      "name": "SJDeviceVolumeAndBrightnessManager",
-      "dependencies": {
-        "SJBaseVideoPlayer/Header": [
+        "ijkplayerssl": [
 
         ],
-        "SJBaseVideoPlayer/Const": [
+        "SJBaseVideoPlayer/Common": [
 
         ]
-      },
-      "source_files": "SJBaseVideoPlayer/SJDeviceVolumeAndBrightnessManager/*.{h,m}",
-      "subspecs": [
-        {
-          "name": "Core",
-          "source_files": "SJBaseVideoPlayer/SJDeviceVolumeAndBrightnessManager/Core/*.{h,m}",
-          "dependencies": {
-            "SJBaseVideoPlayer/SJDeviceVolumeAndBrightnessManager/ResourceLoader": [
+      }
+    },
+    {
+      "name": "AliPlayer",
+      "source_files": "SJBaseVideoPlayer/AliPlayer/**/*.{h,m}",
+      "dependencies": {
+        "AliPlayerSDK_iOS": [
 
-            ]
-          }
-        },
-        {
-          "name": "ResourceLoader",
-          "source_files": "SJBaseVideoPlayer/SJDeviceVolumeAndBrightnessManager/ResourceLoader/*.{h,m}",
-          "resources": "SJBaseVideoPlayer/SJDeviceVolumeAndBrightnessManager/ResourceLoader/SJDeviceVolumeAndBrightnessManager.bundle"
-        }
-      ]
+        ],
+        "SJBaseVideoPlayer/Common": [
+
+        ]
+      }
+    },
+    {
+      "name": "AliVodPlayer",
+      "source_files": "SJBaseVideoPlayer/AliVodPlayer/**/*.{h,m}",
+      "dependencies": {
+        "AliyunPlayer_iOS/AliyunVodPlayerSDK": [
+
+        ],
+        "SJBaseVideoPlayer/Common": [
+
+        ]
+      }
     }
   ]
 }
