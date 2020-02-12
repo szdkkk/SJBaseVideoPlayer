@@ -107,8 +107,11 @@ static NSNotificationName const SJFitOnScreenManagerTransitioningValueDidChangeN
         self.innerFitOnScreen = fitOnScreen;
         self.transitioning = YES;
         if ( fitOnScreen ) {
-            UIViewController *rootViewController = UIApplication.sharedApplication.keyWindow.rootViewController;
-            [rootViewController presentViewController:self.viewController animated:YES completion:^{
+            UIViewController *topViewController = UIApplication.sharedApplication.keyWindow.rootViewController;
+            while (topViewController.presentedViewController) {
+                topViewController = topViewController.presentedViewController;
+            }
+            [topViewController presentViewController:self.viewController animated:YES completion:^{
                 if ( completionHandler ) completionHandler(self);
             }];
         }
