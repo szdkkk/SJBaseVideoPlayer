@@ -1,5 +1,5 @@
 //
-//  SJAliyunVodPlayer.m
+//  SJMediaPlayer.m
 //  Demo
 //
 //  Created by BlueDancer on 2019/11/13.
@@ -7,119 +7,50 @@
 //
 
 #import "SJAliyunVodPlayer.h"
-#import <AliyunVodPlayerSDK/AliyunVodPlayerSDK.h>
 #import "NSTimer+SJAssetAdd.h"
 
 NS_ASSUME_NONNULL_BEGIN
-NSNotificationName const SJAliyunVodPlayerAssetStatusDidChangeNotification = @"SJAliyunVodPlayerAssetStatusDidChangeNotification";
-NSNotificationName const SJAliyunVodPlayerTimeControlStatusDidChangeNotification = @"SJAliyunVodPlayerTimeControlStatusDidChangeNotification";
-NSNotificationName const SJAliyunVodPlayerPresentationSizeDidChangeNotification = @"SJAliyunVodPlayerPresentationSizeDidChangeNotification";
-NSNotificationName const SJAliyunVodPlayerDidPlayToEndTimeNotification = @"SJAliyunVodPlayerDidPlayToEndTimeNotification";
-NSNotificationName const SJAliyunVodPlayerReadyForDisplayNotification = @"SJAliyunVodPlayerReadyForDisplayNotification";
-NSNotificationName const SJAliyunVodPlayerDidReplayNotification = @"SJAliyunVodPlayerDidReplayNotification";
-
-@interface SJAliyunVodPlayerTimeObserverItem : NSObject
-- (instancetype)initWithCurrentTimeDidChangeExeBlock:(void (^)(NSTimeInterval time))block
-                   playableDurationDidChangeExeBlock:(void (^)(NSTimeInterval time))block1
-                           durationDidChangeExeBlock:(void (^)(NSTimeInterval time))block2;
-@property (nonatomic, copy, nullable) void (^currentTimeDidChangeExeBlock)(NSTimeInterval time);
-@property (nonatomic, copy, nullable) void (^playableDurationDidChangeExeBlock)(NSTimeInterval time);
-@property (nonatomic, copy, nullable) void (^durationDidChangeExeBlock)(NSTimeInterval time);
-@end
-
-@implementation SJAliyunVodPlayerTimeObserverItem
-- (instancetype)initWithCurrentTimeDidChangeExeBlock:(void (^)(NSTimeInterval))block playableDurationDidChangeExeBlock:(void (^)(NSTimeInterval))block1 durationDidChangeExeBlock:(void (^)(NSTimeInterval))block2 {
-    self = [super init];
-    if ( self ) {
-        _currentTimeDidChangeExeBlock = block;
-        _playableDurationDidChangeExeBlock = block1;
-        _durationDidChangeExeBlock = block2;
-    }
-    return self;
-}
-@end
-
-@interface SJAliRefreshTimer : NSObject
-- (instancetype)initWithUsingBlock:(void(^)(void))usingBlock;
-@property (nonatomic, copy, readonly) void(^usingBlock)(void);
-- (void)start;
-- (void)stop;
-@end
-
-@implementation SJAliRefreshTimer {
-    NSTimer *_Nullable _timer; 
-}
-
-- (instancetype)initWithUsingBlock:(void (^)(void))usingBlock {
-    self = [super init];
-    if ( self ) {
-        _usingBlock = usingBlock;
-    }
-    return self;
-}
-- (void)start {
-    if ( _timer == nil ) {
-        __weak typeof(self) _self = self;
-        _timer = [NSTimer assetAdd_timerWithTimeInterval:0.5 block:^(NSTimer *timer) {
-            __strong typeof(_self) self = _self;
-            if ( !self ) {
-                [timer invalidate];
-                return ;
-            }
-            if ( self.usingBlock ) self.usingBlock();
-        } repeats:YES];
-        [_timer assetAdd_fire];
-        [NSRunLoop.mainRunLoop addTimer:_timer forMode:NSRunLoopCommonModes];
-    }
-}
-- (void)stop {
-    [_timer invalidate];
-    _timer = nil;
-}
-@end
-
 @interface SJAliyunVodPlayer ()<AliyunVodPlayerDelegate>
-@property (nonatomic, strong, readonly) NSMutableArray<SJAliyunVodPlayerTimeObserverItem *> *observerItems;
-@property (nonatomic) BOOL isPlayedToEndTime;
-@property (nonatomic, getter=isReadyForDisplay) BOOL readyForDisplay;
 @property (nonatomic, copy, nullable) void(^seekCompletionHandler)(BOOL);
-@property (nonatomic) BOOL needSeekToSpecifyStartTime;
+@property (nonatomic) NSTimeInterval startPosition;
+@property (nonatomic) BOOL needSeekToStartPosition;
 @property (nonatomic, nullable) SJWaitingReason reasonForWaitingToPlay;
 @property (nonatomic) SJPlaybackTimeControlStatus timeControlStatus;
 @property (nonatomic) SJSeekingInfo seekingInfo;
 @property (nonatomic) SJAssetStatus assetStatus;
 @property (nonatomic) CGSize presentationSize;
-
+@property (nonatomic) BOOL firstVideoFrameRendered;
 @property (nonatomic, strong, readonly) AliyunVodPlayer *player;
 @property (nonatomic) AliyunVodPlayerState playerStatus;
 @property (nonatomic) AliyunVodPlayerEvent eventType;
 
-@property (nonatomic) NSTimeInterval currentTime;
 @property (nonatomic) NSTimeInterval duration;
-@property (nonatomic) NSTimeInterval playableDuration;
-@property (nonatomic, strong, readonly) SJAliRefreshTimer *timer;
+@property (nonatomic, strong, nullable) NSTimer *refreshTimer;
+@property (nonatomic) NSTimeInterval prePlaybaclDuration;
+
+@property (nonatomic) BOOL isPlaybackFinished;                      ///< 播放结束
+@property (nonatomic, nullable) SJFinishedReason finishedReason;    ///< 播放结束的reason
+@property (nonatomic, readonly) BOOL isPlayedToTrialEndPosition;
 @end
 
 @implementation SJAliyunVodPlayer
-- (instancetype)initWithMedia:(__kindof SJAliyunVodModel *)media specifyStartTime:(NSTimeInterval)time {
+@synthesize pauseWhenAppDidEnterBackground = _pauseWhenAppDidEnterBackground;
+@synthesize isPlayed = _isPlayed;
+@synthesize isReplayed = _isReplayed;
+@synthesize rate = _rate;
+@synthesize volume = _volume;
+@synthesize muted = _muted;
+
+- (instancetype)initWithMedia:(__kindof SJAliyunVodModel *)media startPosition:(NSTimeInterval)time {
     self = [super init];
     if ( self ) {
         _media = media;
-        _specifyStartTime = time;
+        _startPosition = time;
         _assetStatus = SJAssetStatusPreparing;
         _player.delegate = self;
-        _videoGravity = AVLayerVideoGravityResizeAspect;
         _pauseWhenAppDidEnterBackground = YES;
-        _needSeekToSpecifyStartTime = time != 0;
+        _needSeekToStartPosition = time != 0;
         
-        __weak typeof(self) _self = self;
-        _timer = [SJAliRefreshTimer.alloc initWithUsingBlock:^{
-            __strong typeof(_self) self = _self;
-            if ( !self ) return;
-            self.currentTime = self.player.currentTime;
-            self.playableDuration = self.player.loadedTime;
-        }];
-
         _player = AliyunVodPlayer.alloc.init;
         _player.delegate = self;
         if ( media.saveDir.length != 0 ) {
@@ -149,9 +80,12 @@ NSNotificationName const SJAliyunVodPlayerDidReplayNotification = @"SJAliyunVodP
 }
 
 - (void)dealloc {
+#ifdef DEBUG
+    NSLog(@"%d \t %s", (int)__LINE__, __func__);
+#endif
+    [_refreshTimer invalidate];
     [NSNotificationCenter.defaultCenter removeObserver:self];
     [_player releasePlayer];
-    [_timer stop];
 }
 
 - (UIView *)view {
@@ -168,22 +102,27 @@ NSNotificationName const SJAliyunVodPlayerDidReplayNotification = @"SJAliyunVodP
         [self _didEndSeeking:NO];
     }
     
+    time = [self _adjustSeekTimeIfNeeded:time];
+    
     _seekCompletionHandler = completionHandler;
+    BOOL isPlaybackEnded = self.isPlaybackFinished;
     [self _willSeeking:time];
-    if ( _isPlayedToEndTime ) {
+    
+    NSTimeInterval secs = CMTimeGetSeconds(time);
+    if ( isPlaybackEnded ) {
         [self replay];
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self.player seekToTime:CMTimeGetSeconds(time)];
+            [self.player seekToTime:secs];
         });
     }
     else {
-        [_player seekToTime:CMTimeGetSeconds(time)];
+        [_player seekToTime:secs];
         [self play];
     }
 }
 
 - (void)play {
-    if ( _isPlayedToEndTime ) {
+    if ( self.isPlaybackFinished ) {
         [self replay];
     }
     else {
@@ -195,6 +134,7 @@ NSNotificationName const SJAliyunVodPlayerDidReplayNotification = @"SJAliyunVodP
     
     _isPlayed = YES;
 }
+
 - (void)pause {
     self.reasonForWaitingToPlay = nil;
     self.timeControlStatus = SJPlaybackTimeControlStatusPaused;
@@ -204,30 +144,21 @@ NSNotificationName const SJAliyunVodPlayerDidReplayNotification = @"SJAliyunVodP
 
 - (void)replay {
     _isReplayed = YES;
-    _isPlayedToEndTime = NO;
+    self.isPlaybackFinished = NO;
     self.reasonForWaitingToPlay = SJWaitingWhileEvaluatingBufferingRateReason;
     self.timeControlStatus = SJPlaybackTimeControlStatusWaitingToPlay;
-    
     [_player replay];
-    [self _postNotification:SJAliyunVodPlayerDidReplayNotification];
+    [self _postNotification:SJMediaPlayerDidReplayNotification];
 }
 - (void)report {
-    [self _postNotification:SJAliyunVodPlayerAssetStatusDidChangeNotification];
-    [self _postNotification:SJAliyunVodPlayerTimeControlStatusDidChangeNotification];
-    [self _postNotification:SJAliyunVodPlayerPresentationSizeDidChangeNotification];
+    [self _postNotification:SJMediaPlayerAssetStatusDidChangeNotification];
+    [self _postNotification:SJMediaPlayerTimeControlStatusDidChangeNotification];
+    [self _postNotification:SJMediaPlayerDurationDidChangeNotification];
+    [self _postNotification:SJMediaPlayerPlayableDurationDidChangeNotification];
 }
 
-- (id)addTimeObserverWithCurrentTimeDidChangeExeBlock:(void (^)(NSTimeInterval time))block
-                    playableDurationDidChangeExeBlock:(void (^)(NSTimeInterval time))block1
-                            durationDidChangeExeBlock:(void (^)(NSTimeInterval time))block2 {
-    SJAliyunVodPlayerTimeObserverItem *item = [SJAliyunVodPlayerTimeObserverItem.alloc initWithCurrentTimeDidChangeExeBlock:block playableDurationDidChangeExeBlock:block1 durationDidChangeExeBlock:block2];
-    [self.observerItems addObject:item];
-    return item;
-}
-- (void)removeTimeObserver:(id)observer {
-    if ( observer != nil ) {
-        [self.observerItems removeObject:observer];
-    }
+- (nullable UIImage *)screenshot {
+    return self.player.snapshot;
 }
 
 #pragma mark -
@@ -266,7 +197,9 @@ NSNotificationName const SJAliyunVodPlayerDidReplayNotification = @"SJAliyunVodP
 }
 
 - (void)vodPlayer:(AliyunVodPlayer *)vodPlayer playBackErrorModel:(AliyunPlayerVideoErrorModel *)errorModel {
+#ifdef DEBUG
     NSLog(@"%@", errorModel.errorMsg);
+#endif
 }
 
 - (void)vodPlayer:(AliyunVodPlayer *)vodPlayer newPlayerState:(AliyunVodPlayerState)newState {
@@ -300,7 +233,7 @@ NSNotificationName const SJAliyunVodPlayerDidReplayNotification = @"SJAliyunVodP
         [self _toEvaluating];
     });
 }
-
+ 
 #pragma mark -
 
 - (void)_postNotification:(NSNotificationName)name {
@@ -308,13 +241,9 @@ NSNotificationName const SJAliyunVodPlayerDidReplayNotification = @"SJAliyunVodP
         [NSNotificationCenter.defaultCenter postNotificationName:name object:self];
     });
 }
-
-- (void)_fristVideoFrameRender {
-    _readyForDisplay = YES;
-    [self _postNotification:SJAliyunVodPlayerReadyForDisplayNotification];
-}
-
+ 
 - (void)_willSeeking:(CMTime)time {
+    self.isPlaybackFinished = NO;
     _seekingInfo.time = time;
     _seekingInfo.isSeeking = YES;
 }
@@ -330,7 +259,7 @@ NSNotificationName const SJAliyunVodPlayerDidReplayNotification = @"SJAliyunVodP
     SJAssetStatus status = self.assetStatus;
     if ( self.playerStatus == AliyunVodPlayerStatePrepared ) {
         status = SJAssetStatusReadyToPlay;
-        _isPlayedToEndTime = NO;
+        self.isPlaybackFinished = NO;
         self.reasonForWaitingToPlay = SJWaitingWhileEvaluatingBufferingRateReason;
         self.timeControlStatus = SJPlaybackTimeControlStatusWaitingToPlay;
     }
@@ -342,19 +271,19 @@ NSNotificationName const SJAliyunVodPlayerDidReplayNotification = @"SJAliyunVodP
         self.assetStatus = status;
         
         if ( status == SJAssetStatusReadyToPlay ) {
-            if ( self.needSeekToSpecifyStartTime ) {
-                self.needSeekToSpecifyStartTime = NO;
-                [self seekToTime:CMTimeMakeWithSeconds(self.specifyStartTime, NSEC_PER_SEC) completionHandler:nil];
-            }
-            
-            if ( self.shouldAutoplay ) {
-                [self play];
+            if ( self.needSeekToStartPosition ) {
+                self.needSeekToStartPosition = NO;
+                [self seekToTime:CMTimeMakeWithSeconds(self.startPosition, NSEC_PER_SEC) completionHandler:nil];
             }
         }
     }
     
+    if ( self.isPlayedToTrialEndPosition ) {
+        [self _didPlayToTrialEndPosition];
+        return;
+    }
+    
     if ( self.eventType == AliyunVodPlayerEventFirstFrame ) {
-        self.duration = self.player.duration;
         self.presentationSize = CGSizeMake(self.player.videoWidth, self.player.videoHeight);
     }
     
@@ -365,14 +294,15 @@ NSNotificationName const SJAliyunVodPlayerDidReplayNotification = @"SJAliyunVodP
         [self _didEndSeeking:YES];
     }
     else if ( self.playerStatus == AliyunVodPlayerStateFinish ) {
-        self.isPlayedToEndTime = YES;
+        self.finishedReason = SJFinishedReasonToEndTimePosition;
+        self.isPlaybackFinished = YES;
         self.reasonForWaitingToPlay = nil;
         self.timeControlStatus = SJPlaybackTimeControlStatusPaused;
         return;
     }
     
     if ( self.eventType == AliyunVodPlayerEventFirstFrame ) {
-        self.readyForDisplay = YES;
+        self.firstVideoFrameRendered = YES;
     }
     
     if ( self.timeControlStatus != SJPlaybackTimeControlStatusPaused ) {
@@ -399,61 +329,64 @@ NSNotificationName const SJAliyunVodPlayerDidReplayNotification = @"SJAliyunVodP
 - (void)setAssetStatus:(SJAssetStatus)assetStatus {
     _assetStatus = assetStatus;
 
+    if ( assetStatus == SJAssetStatusReadyToPlay ) self.duration = _player.duration;
+    
 #ifdef SJDEBUG
     switch ( assetStatus ) {
         case SJAssetStatusUnknown:
-            printf("SJAliyunVodPlayer.assetStatus.Unknown\n");
+            printf("SJMediaPlayer.assetStatus.Unknown\n");
             break;
         case SJAssetStatusPreparing:
-            printf("SJAliyunVodPlayer.assetStatus.Preparing\n");
+            printf("SJMediaPlayer.assetStatus.Preparing\n");
             break;
         case SJAssetStatusReadyToPlay:
-            printf("SJAliyunVodPlayer.assetStatus.ReadyToPlay\n");
+            printf("SJMediaPlayer.assetStatus.ReadyToPlay\n");
             break;
         case SJAssetStatusFailed:
-            printf("SJAliyunVodPlayer.assetStatus.Failed\n");
+            printf("SJMediaPlayer.assetStatus.Failed\n");
             break;
     }
 #endif
     
-    [self _postNotification:SJAliyunVodPlayerAssetStatusDidChangeNotification];
+    [self _postNotification:SJMediaPlayerAssetStatusDidChangeNotification];
 }
 
 - (void)setTimeControlStatus:(SJPlaybackTimeControlStatus)timeControlStatus {
     _timeControlStatus = timeControlStatus;
-
-    timeControlStatus == SJPlaybackTimeControlStatusPaused ? [self.timer stop] : [self.timer start];
     
+    [self _refreshOrStop];
+
 #ifdef SJDEBUG
     switch ( timeControlStatus ) {
         case SJPlaybackTimeControlStatusPaused:
-            printf("SJAliyunVodPlayer.timeControlStatus.Pause\n");
+            printf("SJMediaPlayer.timeControlStatus.Pause\n");
             break;
         case SJPlaybackTimeControlStatusWaitingToPlay:
-            printf("SJAliyunVodPlayer.timeControlStatus.WaitingToPlay.reason(%s)\n", _reasonForWaitingToPlay.UTF8String);
+            printf("SJMediaPlayer.timeControlStatus.WaitingToPlay.reason(%s)\n", _reasonForWaitingToPlay.UTF8String);
             break;
         case SJPlaybackTimeControlStatusPlaying:
-            printf("SJAliyunVodPlayer.timeControlStatus.Playing\n");
+            printf("SJMediaPlayer.timeControlStatus.Playing\n");
             break;
     }
 #endif
     
-    [self _postNotification:SJAliyunVodPlayerTimeControlStatusDidChangeNotification];
-}
-
-- (void)setIsPlayedToEndTime:(BOOL)isPlayedToEndTime {
-    _isPlayedToEndTime = isPlayedToEndTime;
-    if ( isPlayedToEndTime ) {
-        [self _postNotification:SJAliyunVodPlayerDidPlayToEndTimeNotification];
-    }
-
-    self.currentTime = self.duration;
+    [self _postNotification:SJMediaPlayerTimeControlStatusDidChangeNotification];
 }
 
 - (void)setPresentationSize:(CGSize)presentationSize {
     if ( !CGSizeEqualToSize(presentationSize, _presentationSize) ) {
         _presentationSize = presentationSize;
-        [self _postNotification:SJAliyunVodPlayerPresentationSizeDidChangeNotification];
+        [self _postNotification:SJMediaPlayerPresentationSizeDidChangeNotification];
+    }
+}
+
+- (void)setIsPlaybackFinished:(BOOL)isPlaybackFinished {
+    if ( isPlaybackFinished != _isPlaybackFinished ) {
+        if ( !isPlaybackFinished ) _finishedReason = nil;
+        _isPlaybackFinished = isPlaybackFinished;
+        if ( isPlaybackFinished ) {
+            [self _postNotification:SJMediaPlayerPlaybackDidFinishNotification];
+        }
     }
 }
 
@@ -475,67 +408,98 @@ NSNotificationName const SJAliyunVodPlayerDidReplayNotification = @"SJAliyunVodP
     _player.muteMode = muted;
 }
 
-@synthesize videoGravity = _videoGravity;
-- (void)setVideoGravity:(SJVideoGravity)videoGravity {
-    _videoGravity = videoGravity ?: AVLayerVideoGravityResizeAspect;
-    if ( _videoGravity == AVLayerVideoGravityResize ||
-         _videoGravity == AVLayerVideoGravityResizeAspect ) {
-        _player.displayMode = AliyunVodPlayerDisplayModeFit;
-    }
-    else if ( _videoGravity == AVLayerVideoGravityResizeAspectFill ) {
-        _player.displayMode = AliyunVodPlayerDisplayModeFitWithCropping;
-    }
+- (void)setDisplayMode:(AliyunVodPlayerDisplayMode)displayMode {
+    _player.displayMode = displayMode;
 }
-
-- (void)setReadyForDisplay:(BOOL)readyForDisplay {
-    if ( _readyForDisplay != readyForDisplay ) {
-        _readyForDisplay = readyForDisplay;
-        [self _postNotification:SJAliyunVodPlayerReadyForDisplayNotification];
-    }
-}
-
-@synthesize currentTime = _currentTime;
-- (void)setCurrentTime:(NSTimeInterval)currentTime {
-    if ( currentTime != _currentTime ) {
-        _currentTime = currentTime;
-        for ( SJAliyunVodPlayerTimeObserverItem *item in _observerItems ) {
-            if ( item.currentTimeDidChangeExeBlock != nil )
-                item.currentTimeDidChangeExeBlock(currentTime);
-        }
-    }
-}
-- (NSTimeInterval)currentTime {
-    return _seekingInfo.isSeeking ? CMTimeGetSeconds(_seekingInfo.time) : _currentTime;
-}
-
-- (void)setPlayableDuration:(NSTimeInterval)playableDuration {
-    if ( _playableDuration != playableDuration ) {
-        _playableDuration = playableDuration;
-        for ( SJAliyunVodPlayerTimeObserverItem *item in _observerItems ) {
-            if ( item.playableDurationDidChangeExeBlock != nil )
-                item.playableDurationDidChangeExeBlock(playableDuration);
-        }
-    }
+- (AliyunVodPlayerDisplayMode)displayMode {
+    return _player.displayMode;
 }
 
 - (void)setDuration:(NSTimeInterval)duration {
     _duration = duration;
-    for ( SJAliyunVodPlayerTimeObserverItem *item in _observerItems ) {
-        if ( item.durationDidChangeExeBlock != nil )
-            item.durationDidChangeExeBlock(duration);
-    }
+    [self _postNotification:SJMediaPlayerDurationDidChangeNotification];
 }
 
-@synthesize observerItems = _observerItems;
-- (NSMutableArray<SJAliyunVodPlayerTimeObserverItem *> *)observerItems {
-    if ( _observerItems == nil ) {
-        _observerItems = NSMutableArray.array;
+- (NSTimeInterval)currentTime {
+    if ( _isPlaybackFinished ) {
+        if ( _finishedReason == SJFinishedReasonToEndTimePosition )
+            return _duration;
+        else if ( _finishedReason == SJFinishedReasonToTrialEndPosition )
+            return _trialEndPosition;
     }
-    return _observerItems;
+    return _seekingInfo.isSeeking ? CMTimeGetSeconds(_seekingInfo.time) : _player.currentTime;
+}
+
+- (NSTimeInterval)playableDuration {
+    if ( _trialEndPosition != 0 && _player.loadedTime >= _trialEndPosition ) {
+        return _trialEndPosition;
+    }
+    return _player.loadedTime;
 }
 
 - (void)applicationDidEnterBackground {
     if ( self.pauseWhenAppDidEnterBackground ) [self pause];
+}
+
+- (BOOL)isPlayedToTrialEndPosition {
+    return self.trialEndPosition != 0 && self.currentTime >= self.trialEndPosition;
+}
+
+- (void)_didPlayToTrialEndPosition {
+    if ( self.finishedReason != SJFinishedReasonToTrialEndPosition ) {
+        self.finishedReason = SJFinishedReasonToTrialEndPosition;
+        self.isPlaybackFinished = YES;
+        [self pause];
+    }
+}
+
+- (void)_didPlayToEndPositoion {
+    if ( self.finishedReason != SJFinishedReasonToEndTimePosition ) {
+        self.finishedReason = SJFinishedReasonToEndTimePosition;
+        self.isPlaybackFinished = YES;
+        self.reasonForWaitingToPlay = nil;
+        self.timeControlStatus = SJPlaybackTimeControlStatusPaused;
+    }
+}
+
+- (CMTime)_adjustSeekTimeIfNeeded:(CMTime)time {
+    if ( _trialEndPosition != 0 && CMTimeGetSeconds(time) >= _trialEndPosition ) {
+        time = CMTimeMakeWithSeconds(_trialEndPosition * 0.98, NSEC_PER_SEC);
+    }
+    return time;
+}
+
+- (void)_refreshOrStop {
+    if ( _timeControlStatus == SJPlaybackTimeControlStatusPaused ) {
+        if ( _refreshTimer != nil ) {
+            [_refreshTimer invalidate];
+            _refreshTimer = nil;
+        }
+    }
+    else if ( _refreshTimer == nil ) {
+        __weak typeof(self) _self = self;
+        _refreshTimer = [NSTimer sj_timerWithTimeInterval:0.5 repeats:YES usingBlock:^(NSTimer * _Nonnull timer) {
+            __strong typeof(_self) self = _self;
+            if ( !self ) {
+                [timer invalidate];
+                return ;
+            }
+            
+            if ( self.isPlayedToTrialEndPosition ) {
+                [self _didPlayToTrialEndPosition];
+                return;
+            }
+            
+            NSTimeInterval playableDuration = self.playableDuration;
+            if ( floor(self.prePlaybaclDuration + 0.5) != floor(playableDuration + 0.5) ) {
+                self.prePlaybaclDuration = playableDuration;
+                [self _postNotification:SJMediaPlayerPlayableDurationDidChangeNotification];
+            }
+        }];
+        
+        [_refreshTimer sj_fire];
+        [NSRunLoop.mainRunLoop addTimer:_refreshTimer forMode:NSRunLoopCommonModes];
+    }
 }
 @end
 NS_ASSUME_NONNULL_END

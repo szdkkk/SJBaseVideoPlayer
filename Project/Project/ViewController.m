@@ -7,8 +7,8 @@
 //
 
 #import "ViewController.h"
-#import "SJBaseVideoPlayer.h"
 #import <Masonry.h>
+#import <SJBaseVideoPlayer/SJBaseVideoPlayer.h>
 
 @interface ViewController ()
 @property (nonatomic, strong) SJBaseVideoPlayer *player;
@@ -16,11 +16,14 @@
 
 @implementation ViewController
 
+- (BOOL)shouldAutorotate {
+    return NO;
+}
+ 
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    _player = [SJBaseVideoPlayer player];
-    
+    _player = [SJBaseVideoPlayer player]; 
     [self.view addSubview:_player.view];
     
     [_player.view mas_makeConstraints:^(MASConstraintMaker *make) {
@@ -42,20 +45,6 @@
 //    [_player rotation];
     
     // Do any additional setup after loading the view, typically from a nib.
-}
-
-- (BOOL)prefersStatusBarHidden {
-    return _player.vc_prefersStatusBarHidden;
-}
-
-- (UIStatusBarStyle)preferredStatusBarStyle {
-    return _player.vc_preferredStatusBarStyle;
-}
-
-- (void)didReceiveMemoryWarning {
-    [super didReceiveMemoryWarning];
-    
-    // Dispose of any resources that can be recreated.
 }
 
 - (IBAction)playVideo:(id)sender {
