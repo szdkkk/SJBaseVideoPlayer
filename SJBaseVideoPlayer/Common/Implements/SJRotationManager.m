@@ -288,24 +288,28 @@ static NSNotificationName const SJRotationManagerTransitioningValueDidChangeNoti
     if (self) {
         _currentOrientation = SJOrientation_Portrait;
         _autorotationSupportedOrientations = SJOrientationMaskAll;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            self->_window = [SJFullscreenModeWindow new];
-            self->_window.fullscreenModeViewController.delegate = self;
-            self->_window.rootViewController.sj_delegate = self;
-            if ( @available(iOS 9.0, *) ) {
-                [self->_window.rootViewController loadViewIfNeeded];
-            }
-            else {
-                [self->_window.rootViewController view];
-            }
-        });
         [self _observeNotifies];
+        [self performSelectorOnMainThread:@selector(_setupWindow) withObject:nil waitUntilDone:NO];
     }
     return self;
 }
 
 - (void)dealloc {
     [NSNotificationCenter.defaultCenter removeObserver:self];
+}
+
+- (void)_setupWindow {
+    self->_window = [SJFullscreenModeWindow new];
+    self->_window.fullscreenModeViewController.delegate = self;
+    self->_window.rootViewController.sj_delegate = self;
+    self->_window.frame = UIScreen.mainScreen.bounds;
+    if ( @available(iOS 9.0, *) ) {
+        [self->_window.rootViewController loadViewIfNeeded];
+    }
+    else {
+        [self->_window.rootViewController loadView];
+        [self->_window.rootViewController viewDidLoad];
+    }
 }
 
 - (void)_observeNotifies {
@@ -418,15 +422,15 @@ static NSNotificationName const SJRotationManagerTransitioningValueDidChangeNoti
 }
 
 - (BOOL)prefersStatusBarHidden {
-    return self.viewControllerManager.prefersStatusBarHidden;
+    return self.delegate.prefersStatusBarHidden;
 }
 
 - (UIStatusBarStyle)preferredStatusBarStyle {
-    return self.viewControllerManager.preferredStatusBarStyle;
+    return self.delegate.preferredStatusBarStyle;
 }
 
 - (void)vc_forwardPushViewController:(UIViewController *)viewController animated:(BOOL)animated {
-    [self.viewControllerManager pushViewController:viewController animated:animated];
+    [self.delegate pushViewController:viewController animated:animated];
 }
 
 #pragma mark -
