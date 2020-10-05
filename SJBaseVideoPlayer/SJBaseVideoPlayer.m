@@ -804,6 +804,10 @@ typedef struct _SJPlayerControlInfo {
     return _playbackController.playbackType;
 }
 
+- (void)unbindPlayerLayerIfNeeded {
+    [self.playbackController unbindPlayerLayerIfNeeded];
+}
+
 #pragma mark -
 
 - (NSError *_Nullable)error {

@@ -270,8 +270,10 @@ NS_ASSUME_NONNULL_BEGIN
 ///         当播放发生错误时, 可以通过它来获取错误信息
 ///
 @property (nonatomic, strong, readonly, nullable) NSError *error;
-@end
 
+- (void)unbindPlayerLayerIfNeeded;
+
+@end
 
 #pragma mark - 设置 设备的音量和亮度
 

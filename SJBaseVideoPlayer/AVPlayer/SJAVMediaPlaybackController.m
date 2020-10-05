@@ -110,6 +110,30 @@ NS_ASSUME_NONNULL_BEGIN
     [super replaceMediaForDefinitionMedia:definitionMedia];
 }
 
+#pragma mark - Fix Background Playback
+- (void)unbindPlayerLayerIfNeeded {
+    if (@available(iOS 14.0, *)) {
+        if ( _pictureInPictureController.isEnabled )
+            return;
+    }
+    
+    if (!self.pauseWhenAppDidEnterBackground) {
+        SJAVMediaPlayerLayerView *view = self.currentPlayerView;
+        AVPlayer *player = view.layer.player;
+        view.layer.player = nil;
+        
+        if (@available(iOS 14.0, *)) {
+            if (player && player.status == AVPlayerTimeControlStatusPlaying) {
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    if (player.status != AVPlayerTimeControlStatusPlaying) {
+                        [player play];
+                    }
+                });
+            }
+        }
+    }
+}
+
 #pragma mark - PiP
 
 - (BOOL)isPictureInPictureSupported API_AVAILABLE(ios(14.0)) {

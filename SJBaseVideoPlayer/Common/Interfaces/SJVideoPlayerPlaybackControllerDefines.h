@@ -71,6 +71,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly) SJPictureInPictureStatus pictureInPictureStatus API_AVAILABLE(ios(14.0));
 - (void)startPictureInPicture API_AVAILABLE(ios(14.0));
 - (void)stopPictureInPicture API_AVAILABLE(ios(14.0));
+
+- (void)unbindPlayerLayerIfNeeded;
 @end
 
 /// screenshot`
